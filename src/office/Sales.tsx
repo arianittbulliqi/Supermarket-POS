@@ -9,7 +9,22 @@ import { ZBody } from '../till/More';
 import { Icon } from '../ui/icons';
 import { Sheet } from '../ui/kit';
 import { Paper } from '../ui/paper';
-import { Empty, Top, useMoney } from './ui';
+import { downloadText, Empty, Top, useMoney } from './ui';
+
+const cell = (v: string | number | null | undefined) => {
+  const t = v == null ? '' : String(v);
+  return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
+/**
+ * Receipts the tax authority does not have yet, as CSV: the signed coupon is
+ * included so it can be checked or sent another way. ATK may ask for this.
+ */
+export function unsentCsv(sales: Sale[]): string {
+  const head = ['receipt_no', 'type', 'date', 'cashier', 'total', 'status', 'error', 'verification_no', 'coupon_id', 'details_base64', 'signature_base64'];
+  const rows = sales.map((x) => [x.number, x.kind, x.created_at, x.cashier_name, (x.total / 100).toFixed(2), x.fiscal.status, x.fiscal.error, x.fiscal.code, x.fiscal.coupon_id, x.fiscal.payload?.details, x.fiscal.payload?.signature].map(cell).join(','));
+  return [head.join(','), ...rows].join('\n') + '\n';
+}
 
 const FISCAL_TAG: Record<Sale['fiscal']['status'], [string, string]> = { off: ['tag', 'Off'], pending: ['tag a', 'Waiting'], done: ['tag g', 'Registered'], failed: ['tag r', 'Failed'] };
 
@@ -33,6 +48,11 @@ export function Receipts(_: { user: PublicUser }) {
         <button type="button" className="btn" onClick={() => void fiscal.run()}>
           <Icon n="upload" sm /> Send waiting receipts ({s.pendingFiscal().length})
         </button>
+        {s.pendingFiscal().length > 0 && (
+          <button type="button" className="btn" onClick={() => downloadText(`unsent-receipts-${new Date().toISOString().slice(0, 10)}.csv`, unsentCsv(s.pendingFiscal()), 'text/csv')}>
+            <Icon n="download" sm /> Export unsent (CSV)
+          </button>
+        )}
       </Top>
       <div className="row" style={{ flexWrap: 'wrap', gap: 10 }}>
         <label className="field" style={{ width: 320, maxWidth: '100%' }}>

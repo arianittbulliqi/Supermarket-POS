@@ -5,6 +5,7 @@ import { importProducts, type ImportResult } from '../domain/csv';
 import { exportProducts } from '../domain/csv';
 import { qtyLabel } from '../domain/money';
 import { can } from '../domain/permissions';
+import { guessItemType, XK_ITEM_TYPES } from '../fiscal/xk/coupon';
 import { VAT_LABEL, VAT_RATES, type Product, type PublicUser, type Unit, type VatRate } from '../domain/types';
 import type { ProductInput } from '../store/store';
 import { Icon } from '../ui/icons';
@@ -136,6 +137,7 @@ function ProductSheet({ user, product, onClose }: { user: PublicUser; product: P
     quick: !!p?.quick_key,
     age: !!p?.age_check,
     disc: p?.allow_discount !== false,
+    item_type: p?.item_type ?? '',
   });
   const set = (k: keyof typeof f) => (v: string | boolean) => setF({ ...f, [k]: v });
   const price = toCents(f.price);
@@ -163,6 +165,7 @@ function ProductSheet({ user, product, onClose }: { user: PublicUser; product: P
       quick_key: f.quick,
       age_check: f.age,
       allow_discount: f.disc,
+      item_type: f.item_type || null,
       active: p?.active ?? true,
     };
     try {
@@ -211,6 +214,11 @@ function ProductSheet({ user, product, onClose }: { user: PublicUser; product: P
           <Field label="VAT">
             <Select label="VAT" value={f.vat} onChange={set('vat')} options={VAT_RATES.map((r) => [String(r), VAT_LABEL[r]] as [string, string])} />
           </Field>
+          {s.settings.fiscal_provider === 'xk-atk' && (
+            <Field label="ATK item category" hint={f.item_type ? undefined : `Empty: ${guessItemType(f.category)}, from the category`}>
+              <Select label="ATK item category" value={f.item_type} onChange={set('item_type')} options={[['', 'From the category'], ...XK_ITEM_TYPES]} />
+            </Field>
+          )}
           <Field label="Supplier">
             <label className="field">
               <select aria-label="Supplier" value={f.supplier} onChange={(e) => set('supplier')(e.target.value)}>

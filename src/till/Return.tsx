@@ -1,6 +1,7 @@
 /** Returns: find the receipt, pick what comes back, or take a return without a receipt with a PIN. */
 import { useState } from 'react';
 import { fiscal, fmtDateTime, useStore } from '../app/state';
+import { fiscalModule } from '../fiscal';
 import { returnedSoFar, returnLines, vatOf } from '../domain/cart';
 import { money, qtyLabel } from '../domain/money';
 import { can } from '../domain/permissions';
@@ -46,6 +47,8 @@ export function Return({ user, shift, onBack, onDone }: { user: PublicUser; shif
   }
 
   async function noReceipt() {
+    // ATK: a refund coupon must point to the original fiscal receipt
+    if (s.settings.fiscal_provider === 'xk-atk') return toast('In Kosovo a refund needs the original receipt number.', 'bad');
     const a = await approve('return', 'Return without a receipt', 'A return without a receipt always needs a supervisor.');
     if (!a) return;
     setNoReceiptBy(a.name);
@@ -64,7 +67,8 @@ export function Return({ user, shift, onBack, onDone }: { user: PublicUser; shif
     }
     try {
       const r = s.recordReturn({ original: orig, lines, method, cashier: user, shiftId: shift.id, approvedBy: by ?? (can(user.role, 'return') ? user.name : null), reason, restock });
-      fiscal.kick();
+      if (fiscalModule(r.fiscal.provider).sign) await fiscal.settle(r.id);
+      else fiscal.kick();
       onDone(r);
     } catch (e) {
       toast(errText(e), 'bad');

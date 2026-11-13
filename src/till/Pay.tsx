@@ -26,17 +26,24 @@ export function Payment({ user, shift, cart, approvedBy, onBack, onPaid }: { use
   const cash = method === 'card' ? 0 : padCents(cashDigits);
   const card = method === 'card' ? t.total : method === 'split' ? padCents(cardDigits) : 0;
   const st = settle(t.total, { cash, card });
+  const [registering, setRegistering] = useState(false);
 
-  function finish(c = cash, k = card) {
+  async function finish(c = cash, k = card) {
+    if (registering) return;
     const r = settle(t.total, { cash: c, card: k });
     if (!r.ok) return toast(k > t.total ? 'The card part is more than the total.' : `Still to pay ${m(r.due)}.`, 'bad');
+    let sale: Sale;
     try {
-      const sale = s.recordSale({ totals: t, payments: r.payments, cash_given: c, change: r.change, cashier: user, shift_id: shift.id, approved_by: approvedBy });
-      fiscal.kick();
-      onPaid(sale);
+      sale = s.recordSale({ totals: t, payments: r.payments, cash_given: c, change: r.change, cashier: user, shift_id: shift.id, approved_by: approvedBy });
     } catch (e) {
-      toast(errText(e), 'bad');
+      return toast(errText(e), 'bad');
     }
+    // Kosovo: the receipt is signed and sent before it is handed over (or marked OFFLINE)
+    if (fiscalModule(sale.fiscal.provider).sign) {
+      setRegistering(true);
+      await fiscal.settle(sale.id);
+    } else fiscal.kick();
+    onPaid(sale);
   }
 
   const key = (k: string) => {
@@ -48,7 +55,7 @@ export function Payment({ user, shift, cart, approvedBy, onBack, onPaid }: { use
     const h = (e: KeyboardEvent) => {
       if (/^\d$/.test(e.key)) key(e.key);
       else if (e.key === 'Backspace') key('del');
-      else if (e.key === 'Enter') finish();
+      else if (e.key === 'Enter') void finish();
       else if (e.key === 'Escape') onBack();
     };
     window.addEventListener('keydown', h);
@@ -58,6 +65,11 @@ export function Payment({ user, shift, cart, approvedBy, onBack, onPaid }: { use
   return (
     <>
       <TillBar title="Payment" sub={`Till ${s.settings.till_no} · ${user.name} · ${t.items} items`} onBack={onBack} />
+      {registering && (
+        <div role="status" style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(255,255,255,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700 }}>
+          Registering the receipt with ATK…
+        </div>
+      )}
       <div className="body" style={{ gap: 18 }}>
         <div className="panel col" style={{ flex: 1, padding: 20, gap: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 10 }}>
@@ -80,7 +92,7 @@ export function Payment({ user, shift, cart, approvedBy, onBack, onPaid }: { use
               <div className="mut" style={{ maxWidth: 520 }}>
                 Charge <b className="num">{m(t.total)}</b> on the card terminal. When it shows approved, tap the button. (This version doesn't talk to the terminal yet, so nothing is charged from here.)
               </div>
-              <button type="button" className="btn go xl" style={{ width: 420 }} onClick={() => finish(0, t.total)}>
+              <button type="button" className="btn go xl" style={{ width: 420 }} onClick={() => void finish(0, t.total)}>
                 Card approved · {m(t.total)}
               </button>
             </div>
@@ -112,7 +124,7 @@ export function Payment({ user, shift, cart, approvedBy, onBack, onPaid }: { use
                     {k === 'clear' ? 'Clear' : k === 'del' ? 'Delete' : k}
                   </button>
                 ))}
-                <button type="button" className="btn go" style={{ height: 60, gridColumn: 'span 2', fontSize: 18 }} onClick={() => finish()}>
+                <button type="button" className="btn go" style={{ height: 60, gridColumn: 'span 2', fontSize: 18 }} onClick={() => void finish()}>
                   Done
                 </button>
               </div>
@@ -144,7 +156,7 @@ export function Payment({ user, shift, cart, approvedBy, onBack, onPaid }: { use
           </div>
           <div className="grow" />
           {method !== 'card' && (
-            <button type="button" className="btn go xl" disabled={!st.ok} style={{ opacity: st.ok ? 1 : 0.5 }} onClick={() => finish()}>
+            <button type="button" className="btn go xl" disabled={!st.ok} style={{ opacity: st.ok ? 1 : 0.5 }} onClick={() => void finish()}>
               Complete sale
             </button>
           )}
@@ -169,7 +181,7 @@ export function ReceiptScreen({ sale, user, onNew }: { sale: Sale; user: PublicU
     return () => window.removeEventListener('keydown', h);
   }, [onNew]);
   const fiscalState =
-    live.fiscal.status === 'off' ? ['Tax registration is off for this store', 'tag', 'Off'] : live.fiscal.status === 'done' ? [`Registered with the tax authority${mod.test ? ' (test mode)' : ''}`, 'tag g', 'Done'] : live.fiscal.status === 'failed' ? [`Not registered yet: ${live.fiscal.error ?? 'error'}. Retrying.`, 'tag r', 'Retrying'] : ['Sending to the tax authority', 'tag a', 'Waiting'];
+    live.fiscal.status === 'off' ? ['Tax registration is off for this store', 'tag', 'Off'] : live.fiscal.status === 'done' ? [`Registered with the tax authority${mod.test ? ' (test mode)' : ''}`, 'tag g', 'Done'] : live.fiscal.offline ? ['Signed on the till and printed with OFFLINE. It goes to the tax authority as soon as it can be reached.', 'tag a', 'Offline'] : live.fiscal.status === 'failed' ? [`Not registered yet: ${(live.fiscal.error ?? 'error').replace(/\.$/, '')}. Retrying.`, 'tag r', 'Retrying'] : ['Sending to the tax authority', 'tag a', 'Waiting'];
   return (
     <>
       <TillBar sub={`Till ${s.settings.till_no} · ${user.name}`} />

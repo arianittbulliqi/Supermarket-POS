@@ -3,7 +3,8 @@
  *
  * Kosovo, Albania and Serbia all require every receipt to be registered with
  * the tax authority, but in different ways:
- *   - Kosovo (ATK): a certified fiscal device prints or signs each receipt.
+ *   - Kosovo (ATK): the certified fiscal software (SEF) signs each receipt
+ *     with the till's own certificate and sends it to ATK in real time.
  *   - Albania (DPT): the till signs the receipt (NSLF/IIC) and sends it to the
  *     CIS service online, which returns the NIVF/FIC; offline receipts must be
  *     sent within the legal limit once the connection is back.
@@ -14,14 +15,14 @@
  * 'pending', then the queue (src/fiscal/queue.ts) registers it and retries
  * until it succeeds. Choosing a module is one setting.
  *
- * The country modules here are TEST adapters: they build the receipt data and
- * the verification code and link in each country's shape, but sign with a
- * local test key and send nothing. A certified connection (device driver,
- * certificate, server endpoint) replaces `register` per module once the
- * launch country and its certification are settled.
+ * Kosovo (src/fiscal/xk) is the real ATK integration: the till signs each
+ * receipt with its own certificate and sends it to ATK's service. The Albania
+ * and Serbia modules are still TEST adapters: they build the receipt data in
+ * each country's shape but sign with a local test key and send nothing.
  */
 import { sha256 } from '../domain/sha256';
-import type { Sale, Settings } from '../domain/types';
+import type { FiscalStamp, Product, Sale, Settings } from '../domain/types';
+import { kosovo } from './xk';
 
 export interface FiscalField {
   key: string;
@@ -47,8 +48,27 @@ export interface FiscalModule {
   fields: FiscalField[];
   /** True while the module is a test adapter that sends nothing. */
   test: boolean;
-  register(sale: Sale, settings: Settings): Promise<FiscalResult>;
+  /** True when the module is connected to the authority's test environment. */
+  isTest?(settings: Settings): boolean;
+  /** Modules that send through a device or service in one step. */
+  register?(sale: Sale, settings: Settings): Promise<FiscalResult>;
+  /**
+   * Modules that sign on the till: build and sign the receipt. Needs no
+   * connection, so receipts always print with their code and QR.
+   */
+  sign?(sale: Sale, settings: Settings, ctx: FiscalContext): Promise<Partial<FiscalStamp>>;
+  /** Send a receipt that `sign` has signed. */
+  send?(sale: Sale, settings: Settings): Promise<Partial<FiscalStamp>>;
 }
+
+/** What a module may look up while signing. */
+export interface FiscalContext {
+  sale(id: string): Sale | undefined;
+  product(id: string): Product | undefined;
+}
+
+/** Test environment or test adapter: receipts say they are not fiscal. */
+export const isTestMode = (mod: FiscalModule, settings: Settings) => mod.test || (mod.isTest?.(settings) ?? false);
 
 const stamp = (sale: Sale, settings: Settings) =>
   [settings.business_no, settings.till_no, sale.number, sale.created_at, sale.total].join('|');
@@ -63,23 +83,6 @@ const none: FiscalModule = {
   test: false,
   async register() {
     return { code: '', qr: null };
-  },
-};
-
-const kosovo: FiscalModule = {
-  id: 'xk-atk',
-  name: 'Kosovo · ATK fiscal device',
-  country: 'Kosovo',
-  how: 'Each receipt goes to the ATK-certified fiscal device connected to this till, which signs and numbers it.',
-  codeLabel: 'Fiscal no.',
-  fields: [
-    { key: 'device', label: 'Fiscal device address', placeholder: 'COM3 or 192.168.1.50:4999' },
-    { key: 'device_id', label: 'Device number', placeholder: '[DEVICE NO]' },
-  ],
-  test: true,
-  async register(sale, settings) {
-    const h = sha256('xk|' + stamp(sale, settings)).toUpperCase();
-    return { code: `${settings.fiscal_config.device_id || 'TEST'}-${h.slice(0, 10)}`, qr: null };
   },
 };
 

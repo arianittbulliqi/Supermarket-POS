@@ -539,6 +539,11 @@ export class Store {
     return sale.lines.map((l, i) => round3(l.qty - used[i]));
   }
 
+  /** The next receipt number within this shift's Z period. */
+  private dailyNo(shiftId: string): number {
+    return this.data.sales.filter((x) => x.shift_id === shiftId).length + 1;
+  }
+
   private fiscalStamp(): FiscalStamp {
     const provider = this.data.settings.fiscal_provider;
     return provider === 'none' ? { ...OFF_STAMP } : { status: 'pending', provider, code: null, qr: null, error: null, attempts: 0 };
@@ -558,6 +563,7 @@ export class Store {
       id: newId('s'),
       number: this.data.next_number++,
       till_no: this.data.settings.till_no,
+      daily_no: this.dailyNo(input.shift_id),
       kind: 'sale',
       ref_sale_id: null,
       ref_number: null,
@@ -613,6 +619,7 @@ export class Store {
       id: newId('s'),
       number: this.data.next_number++,
       till_no: this.data.settings.till_no,
+      daily_no: this.dailyNo(opts.shiftId),
       kind: 'return',
       ref_sale_id: original?.id ?? null,
       ref_number: original?.number ?? null,

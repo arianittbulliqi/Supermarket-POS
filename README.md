@@ -31,19 +31,33 @@ Each country registers receipts with the tax authority differently, so it's a mo
 
 | Module | How |
 | --- | --- |
-| Kosovo · ATK | A certified fiscal device signs and numbers each receipt |
+| Kosovo · ATK (SEF) | The till signs each receipt with its own ATK certificate and sends it to ATK in real time |
 | Albania · CIS | The till signs the receipt (NSLF) and the tax service returns the NIVF |
 | Serbia · L-PFR / V-PFR | The fiscal processor signs it and returns the PFR number and check link |
 
 A sale is saved first and registered afterwards by a queue that retries until it works, so the till never waits on the tax service and keeps selling offline.
 
-**The three country modules are test adapters.** They build each receipt in the right shape and sign it with a local test key, but send nothing, and receipts print "TEST MODE". A certified connection (device driver, certificate, endpoint) replaces `register` in the chosen module once the launch country is decided.
+### Kosovo (launch country)
+
+`src/fiscal/xk` follows ATK's technical reference ([github.com/fiskalizimi](https://github.com/fiskalizimi)) and Administrative Instruction MF 01/2026:
+
+- **Coupons**: each sale or refund becomes ATK's `PosCoupon` (sent to ATK) and `CitizenCoupon` (in the QR code), encoded as protobuf. Tests check the bytes against ATK's own Go library (`tests/fixtures/atk-vectors.go`).
+- **Signing**: ECDSA P-256 / SHA-256 over the base64 coupon, DER signature, as ATK verifies it. Each till makes its own key in the browser as non-extractable, so it can never be copied off the device.
+- **Connect to ATK** (Settings → Tax and fiscal): verifies the business (`/ca/verify/{nui}`), sends a certificate request (`/ca/signcsr`) and keeps the signed certificate. Test and production environments are separate.
+- **Receipts** are signed the moment they are paid, so they always print with their QR code and verification number (NUIKF). The till sends each one before handing the receipt over; if ATK can't be reached it prints **OFFLINE** and the queue sends the same signed coupon when the connection is back, oldest first.
+- **Receipt layout** in Albanian as ATK's examples (Shtojca F): NUI, VAT no., operator, ATK tax letters per line, tax per rate, total without tax, SEF number (unit-NUI-POS), daily receipt number, RKS logo, e-kupon. Reprints say KOPJE E KUPONIT; the Z report ends with RAPORTI TATIMOR.
+- **Refunds** go to ATK as Return coupons that point to the original coupon, so a refund needs the original receipt.
+- **Stored data** is encrypted on the device (AES-GCM, non-extractable key), and unsent receipts can be exported as CSV from Receipts.
+
+Browsers can only call ATK if ATK's server allows it (CORS). If it doesn't, set a relay address in Settings: a small pass-through on the store's server that forwards the same paths to ATK.
+
+The Albania and Serbia modules are still test adapters: they build each receipt in the right shape and sign it with a local test key, but send nothing, and receipts print "TEST MODE".
 
 ## Data
 
 Everything is stored on the device in IndexedDB (with a localStorage fallback) and the app shell is cached by a service worker, so it works with no internet at all. There is no server or sync between tills yet: the back office reads the same device's data. Use **Settings → Data and backup** to download a backup every day.
 
-Money is whole cents and prices include VAT (8% A, 18% B, 0% C). Stock only changes through recorded moves (sale, return, delivery, count, damaged, expired), so every stock number has a history.
+Money is whole cents and prices include VAT, with ATK's letters (8% D, 18% E, 0% C). Stock only changes through recorded moves (sale, return, delivery, count, damaged, expired), so every stock number has a history.
 
 ## Run it
 
@@ -58,4 +72,4 @@ To try everything quickly: open the back office, sign in with 0000, then **Setti
 
 ## Not built yet
 
-Card terminal and scale drivers, certified fiscal connections, sync between tills and a central server, customers and loyalty.
+Card terminal and scale drivers, fiscal connections for Albania and Serbia, cancelling a fiscal receipt (Kupon i Anuluar), Albanian and Serbian screens, sync between tills and a central server, customers and loyalty.

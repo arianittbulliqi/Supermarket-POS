@@ -44,11 +44,16 @@ export interface Product {
   /** Off for items that may never be discounted (tobacco, some medicine). */
   allow_discount?: boolean;
   price_history?: { at: string; price: number; by: string }[];
+  /** Kosovo: ATK item category code (AU, PP, MPM…). Guessed from the category when empty. */
+  item_type?: string | null;
 }
 
-/** VAT rate letter, as printed next to each receipt line. */
-export const VAT_CODE: Record<VatRate, string> = { 8: 'A', 18: 'B', 0: 'C' };
-export const VAT_LABEL: Record<VatRate, string> = { 8: 'A · 8% (food and basic goods)', 18: 'B · 18% (everything else)', 0: 'C · 0% (exempt)' };
+/**
+ * VAT rate letter, as printed next to each receipt line. These are ATK's
+ * letters (Administrative Instruction MF 01/2026): A exempt, C 0%, D 8%, E 18%.
+ */
+export const VAT_CODE: Record<VatRate, string> = { 0: 'C', 8: 'D', 18: 'E' };
+export const VAT_LABEL: Record<VatRate, string> = { 8: 'D · 8% (food and basic goods)', 18: 'E · 18% (everything else)', 0: 'C · 0%' };
 
 export interface User {
   id: string;
@@ -131,6 +136,8 @@ export interface Sale {
   number: number;
   /** Which till took it (1, 2, 3…): receipts print as "1-0418". */
   till_no?: number;
+  /** Receipt number within the shift's Z period (the daily receipt number on Kosovo receipts). */
+  daily_no?: number;
   kind: 'sale' | 'return';
   /** For a return: the sale it refunds. */
   ref_sale_id: string | null;
@@ -170,6 +177,18 @@ export interface FiscalStamp {
   qr: string | null;
   error: string | null;
   attempts: number;
+  /**
+   * Kosovo: the signed coupon (base64 protobuf and signature), kept so every
+   * retry sends exactly what was printed.
+   */
+  payload?: { details: string; signature: string } | null;
+  /** Kosovo: the coupon number sent to ATK, unique in the business. */
+  coupon_id?: string | null;
+  /** Kosovo: ATK's transaction id, once ATK has accepted the receipt. */
+  transaction_id?: string | null;
+  sent_at?: string | null;
+  /** The receipt was handed over before the tax service had it: it printed with OFFLINE. */
+  offline?: boolean;
 }
 
 export interface ParkedSale {

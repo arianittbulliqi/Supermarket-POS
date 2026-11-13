@@ -8,6 +8,7 @@ import { loadSample, SAMPLE_PINS } from '../store/sample';
 import { Icon } from '../ui/icons';
 import { errText, Toggle, useToast } from '../ui/kit';
 import { Paper } from '../ui/paper';
+import { AtkConnect } from './AtkConnect';
 import { downloadText, Field, fromCents, Text, toCents, Top } from './ui';
 import type { Sale } from '../domain/types';
 
@@ -39,7 +40,8 @@ export function SettingsPage({ user }: { user: PublicUser }) {
       { rate: 18, gross: 189, net: 160, vat: 29 },
     ],
     payments: [{ method: 'cash', amount: 548 }], cash_given: 1000, change: 452, approved_by: null,
-    fiscal: { status: f.fiscal_provider === 'none' ? 'off' : 'done', provider: f.fiscal_provider, code: f.fiscal_provider === 'none' ? null : 'TEST-0000-0000', qr: null, error: null, attempts: 1 },
+    daily_no: 1,
+    fiscal: { status: f.fiscal_provider === 'none' ? 'off' : 'done', provider: f.fiscal_provider, code: f.fiscal_provider === 'none' ? null : 'DEMO2345DEMO2345', qr: f.fiscal_provider === 'xk-atk' ? 'DEMO RECEIPT · NOT FISCAL' : null, error: null, attempts: 1 },
   };
   return (
     <>
@@ -108,6 +110,7 @@ export function SettingsPage({ user }: { user: PublicUser }) {
                 </button>
               ))}
             </div>
+            {mod.id === 'xk-atk' && <AtkConnect f={f} user={user} setConfig={(c) => set('fiscal_config', c)} />}
             {mod.fields.length > 0 && (
               <div className="card form" style={{ padding: 18 }}>
                 {mod.fields.map((fl) => (
@@ -127,11 +130,11 @@ export function SettingsPage({ user }: { user: PublicUser }) {
           </div>
           <div className="aside card" style={{ padding: 16 }}>
             <h2 className="h2" style={{ marginBottom: 6 }}>VAT rates</h2>
-            <div className="kv"><span>A · reduced (basic food, medicine)</span><b>8%</b></div>
-            <div className="kv"><span>B · standard</span><b>18%</b></div>
-            <div className="kv"><span>C · exempt</span><b>0%</b></div>
+            <div className="kv"><span>D · reduced (basic food, medicine)</span><b>8%</b></div>
+            <div className="kv"><span>E · standard</span><b>18%</b></div>
+            <div className="kv"><span>C · zero rate</span><b>0%</b></div>
             <div className="mut small" style={{ marginTop: 10 }}>
-              Prices include VAT. Each receipt line shows its rate letter, and receipts and Z reports carry the VAT per rate. The country modules here are test adapters: they build each receipt in the right shape and sign it with a test key, but send nothing until the certified connection for the launch country is added.
+              Prices include VAT. The letters are ATK's (A exempt, C 0%, D 8%, E 18%). Each receipt line shows its letter, and receipts and Z reports carry the VAT per rate. Kosovo is the real ATK connection; Albania and Serbia are still test adapters that send nothing.
             </div>
           </div>
         </div>
