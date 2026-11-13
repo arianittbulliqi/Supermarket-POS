@@ -12,7 +12,12 @@ const KEY = 'data';
 function openDb(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
   return new Promise((resolve) => {
-    const r = indexedDB.open(DB, 1);
+    let r: IDBOpenDBRequest;
+    try {
+      r = indexedDB.open(DB, 1);
+    } catch {
+      return resolve(null); // storage blocked in this browser: fall back
+    }
     r.onupgradeneeded = () => r.result.createObjectStore(STORE);
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => resolve(null);
@@ -21,6 +26,7 @@ function openDb(): Promise<IDBDatabase | null> {
 }
 
 export function browserPersist(): Persist {
+  let memory: string | null = null;
   let db: Promise<IDBDatabase | null> | null = null;
   const get = () => (db ??= openDb());
   const tx = async (mode: IDBTransactionMode) => {
@@ -37,7 +43,13 @@ export function browserPersist(): Persist {
   return {
     async load() {
       const s = await tx('readonly');
-      if (!s) return localStorage.getItem(KEY);
+      if (!s) {
+        try {
+          return localStorage.getItem(KEY) ?? memory;
+        } catch {
+          return memory;
+        }
+      }
       return new Promise((resolve, reject) => {
         const r = s.get(KEY);
         r.onsuccess = () => resolve((r.result as string | undefined) ?? null);
@@ -46,7 +58,15 @@ export function browserPersist(): Persist {
     },
     async save(json) {
       const s = await tx('readwrite');
-      if (!s) return localStorage.setItem(KEY, json);
+      memory = json;
+      if (!s) {
+        try {
+          localStorage.setItem(KEY, json);
+        } catch {
+          /* storage blocked (private window): keep it in memory for this visit */
+        }
+        return;
+      }
       await new Promise<void>((resolve, reject) => {
         const r = s.put(json, KEY);
         r.onsuccess = () => resolve();

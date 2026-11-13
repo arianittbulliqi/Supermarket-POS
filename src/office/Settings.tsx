@@ -193,7 +193,7 @@ function DataTab({ user }: { user: PublicUser }) {
           <Icon n="download" sm /> Download backup
         </button>
         <label className="btn">
-          <Icon n="upload" sm /> Restore from a backup
+          <Icon n="upload" sm /> Restore from a backup (replaces everything here)
           <input
             type="file"
             accept=".json,application/json"
@@ -201,7 +201,6 @@ function DataTab({ user }: { user: PublicUser }) {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
-              if (!window.confirm('Replace everything on this device with this backup?')) return;
               try {
                 await s.restoreJson(await file.text(), user);
                 toast('Backup restored.');
