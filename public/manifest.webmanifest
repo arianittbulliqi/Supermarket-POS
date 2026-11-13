@@ -1,0 +1,9 @@
+{
+  "name": "Grocery POS",
+  "short_name": "POS",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#F4F5F2",
+  "theme_color": "#16201B",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
